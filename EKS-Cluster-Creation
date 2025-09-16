@@ -1,0 +1,6 @@
+  <EKS CLUSTER creation started>
+
+* go to eks cluster console,create cluster,Configuration options{Quick configuration} then do Cluster configuration then create this time cluster creation is complited give 10 minute.
+* after cluster status active, go to compute and create NODEGROUP, attach another one created iam role. after node group creation ( go to add-ons,get more add-ons,select ( amazon vpc cni ) next.
+
+                                                                                            show all status will be active
