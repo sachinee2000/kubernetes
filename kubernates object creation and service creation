@@ -1,0 +1,951 @@
+ 1). namespace object creation
+
+* Shows all namespaces currently in the cluster:
+  kubectl get namespaces
+
+* This creates a new namespace named amma
+  kubectl create namespace amma
+
+* View namespace details ,Shows labels, annotations, resource quotas, and status of the namespace.
+  kubectl describe namespace amma
+
+                                                                                    (first create a custom name space after we set deafult namespace)
+
+* Check current context namespace, show default name space
+  kubectl config view --minify | grep namespace:
+
+* Set new default namespace
+  kubectl config set-context --current --namespace=amma
+
+* Check current context namespace, show default name space
+  kubectl config view --minify | grep namespace:
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+                                                                                                    2). Create secret object
+                                                                                                     
+* Create secret object command
+  kubectl create secret docker-registry my-docker-secret \
+  --docker-server=https://index.docker.io/v1/ \
+  --docker-username=vinaykumars064 \
+  --docker-password=vini9535@ \
+  --docker-email=vinaykumars064@gmail.com
+
+
+* 🔹 Explanation:
+
+--my-docker-secret → Secret name.
+
+--docker-server → Registry URL (https://index.docker.io/v1/ for Docker Hub).
+
+--docker-username → Your Docker Hub username.
+
+--docker-password → Your Docker Hub password / access token.
+
+--docker-email → Your email.
+
+
+*  kubectl get secrets  or  kubectl get svc
+*  kubectl describe secret my-docker-secret
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+                                                                                                   
+                                                                                              3). pod object creation with secret and container port
+
+Uses a Secret for private Docker registry login
+
+Runs a container with an exposed container port    
+
+* first create one file cold pod.yaml
+  touch pod.yaml
+  vim pod.yaml
+  cat pod.yaml
+ 
+
+example:::
+
+   apiVersion: v1
+kind: Pod
+metadata:
+  name: my-pod
+  labels:
+    app: my-pod
+spec:
+  containers:
+  - name: my-pod
+    image: vinaykumars064/cicd-repo:latest                # private image
+    ports:
+    - containerPort: 80                            # container port exposed
+  imagePullSecrets:
+  - name: my-docker-secret                         # secret created earlier
+
+
+
+  Steps to Use ::
+
+  *  Apply the Pod
+     kubectl apply -f pod.yaml
+
+  *  Verify pod status
+     kubectl get pods
+     kubectl describe pod my-pod
+
+
+
+
+  ✅ What happens here?
+
+      Kubernetes uses my-docker-secret to log in to Docker Hub (or your registry).
+
+      The Pod pulls private-nginx:latest.
+
+      The container exposes port 80 internally (you can later attach a Service to make it accessible).
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------      
+
+     
+                                                                                          4). deployment object creation with secret and container port and replicas
+
+
+
+Here’s a ready-to-use deployment.yaml that creates a Deployment in Kubernetes with:
+
+*Secret for pulling a private Docker image
+*Container port exposed
+* with 2 replicas
+
+
+* first create one file cold deployment.yaml
+  touch deployment.yaml
+  vim deployment.yaml
+  cat deployment.yaml
+ 
+
+example:::
+
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app-deployment
+  labels:
+    app: my-app
+spec:
+  replicas: 2                                # number of Pods to run
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+      - name: my-app-container
+        image: your-docker-user/your-private-image:latest   # replace with your private image
+        ports:
+        - containerPort: 8080                               # expose port inside container
+      imagePullSecrets:
+      - name: my-docker-secret                              # secret created earlier
+
+
+
+
+1. Apply the Deployment
+kubectl apply -f deployment.yaml
+
+2. Verify
+kubectl get deployments
+kubectl get pods
+kubectl describe deployment my-app-deployment
+
+
+✅ Explanation
+
+replicas: 2 → runs 2 Pods for scaling.
+
+containerPort: 8080 → container listens on port 8080.
+
+imagePullSecrets → allows Kubernetes to use the secret when pulling from a private Docker registry.
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+                                                                                                 5). service object
+
+                                                                                                    A) cluster ip
+
+
+*create a deployment object with docker secrets and service ( cluster ip ) and port number with 2 replicas
+
+touch deployment.ymal : create one file
+vim deployment.yaml : copy and paste
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deployment
+  labels:
+    app: my-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: my-deployment
+  template:
+    metadata:
+      labels:
+        app: my-deployment
+    spec:
+      containers:
+      - name: my-deployment
+        image: vinaykumars064/cicd-repo:latest   # replace with your private image
+        ports:
+        - containerPort: 8080
+      imagePullSecrets:
+      - name: my-docker-secret
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+  labels:
+    app: my-service
+spec:
+  type: ClusterIP
+  selector:
+    app: my-service
+  ports:
+  - port: 8080        # Service port (internal)
+    targetPort: 8080  # Container port
+
+
+* cat deployment.yaml : describe
+
+
+Apply YAML
+* kubectl apply -f deployment.yaml
+
+Verify Service
+* kubectl get svc my-app-service
+
+
+You should see something like:
+
+NAME             TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)    AGE
+my-app-service   ClusterIP   10.96.123.45   <none>        8080/TCP   10s
+
+
+This means your pods are internally reachable within the cluster at http://my-app-service:8080
+
+
+this deployment and service internally working or not
+using this command to login the conatainer
+* kubectl exec -it <full conatainer name > -- /bin/bash
+
+
+
+
+then check :
+
+How to correctly test?
+
+✅ From inside the cluster (a Pod):
+
+kubectl exec -it <your-pod-name> -- curl http://172.20.85.52:8080
+
+
+✅ From a Service (ClusterIP):
+If you already created a ClusterIP service for your deployment:
+
+* kubectl get svc
+
+
+Example output:
+
+NAME            TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)   AGE
+my-app-service  ClusterIP   10.100.200.15   <none>        80/TCP    10m
+
+
+You can test it inside a pod:
+
+kubectl exec -it <your-pod-name> -- curl http://my-app-service:80
+
+
+***another way to create cluster ip service for existing deployment.
+--------------------------------------------------------------------
+
+* kubectl expose deployment my-deployments --type=ClusterIP --name=my-service --port=80 --target-port=80
+
+
+What happens:
+
+Type: ClusterIP → Default service type. It makes the Service accessible only inside the cluster using the ClusterIP.
+
+--name=my-service → Service will be named my-service.
+
+--port=80 → Port the Service exposes inside the cluster.
+
+--target-port=80 → The port in your Pods that the Service forwards traffic to.
+
+Check service:
+*kubectl get svc my-service
+
+
+You’ll see something like:
+
+NAME         TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
+my-service   ClusterIP   10.96.172.34   <none>        80/TCP    5s
+
+Access:
+
+Accessible only from inside the cluster (e.g., from another Pod, or using kubectl port-forward).
+
+Example:
+
+curl http://10.96.172.34:80
+
+
+
+
+if you not install the curl you will install the curl
+Install curl inside your running pod
+
+If your container has a package manager (apt, apk, yum), you can install curl inside:
+
+apt update && apt install -y curl
+
+Then:
+
+curl http://172.20.85.52:8080
+
+                                                                                                 
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+                                                                                                 5). service object
+
+                                                                                                    B) node port ip
+
+
+Creates a Deployment object with usecases
+
+*Uses a Secret for pulling private Docker images
+*adding the 2 replicas
+*Exposes the app on port 8010 (your Gunicorn app)
+*Exposes the app externally using a NodePort Service
+*adding the node selector
+
+
+*touch deployment.yaml
+*vim deployment.yaml
+*cat deployment.yaml
+
+
+# ---------------- Deployment ----------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deployment                       # Name of the deployment
+  labels:
+    app: my-deployment                       # Label for identifying this deployment
+spec:
+  replicas: 2                                # Number of pod replicas
+  selector:
+    matchLabels:
+      app: my-deployment                     # Match pods with this label
+  template:
+    metadata:
+      labels:
+        app: my-deployment                   # Pods created will have this label
+    spec:
+      nodeSelector:                          # Ensures pods only schedule on nodes with this label
+        vandana: vinay                       # Node must have label vandana=vinay
+      containers:
+      - name: my-deployment
+        image: vinaykumars064/cicd-repo:latest   # Container image (update if needed)
+        ports:
+        - containerPort: 8010                # Gunicorn listens inside the pod on port 8010
+      imagePullSecrets:
+      - name: my-docker-secret               # Secret for pulling private images
+
+---
+# ---------------- Service ----------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service                           # Service name
+  labels:
+    app: my-service
+spec:
+  type: NodePort                             # Expose service externally via node’s IP + NodePort
+  selector:
+    app: my-deployment                       # Must match pod label, so traffic routes correctly
+  ports:
+  - port: 80                                 # Service port (clients use this)
+    targetPort: 8010                         # Maps to containerPort 8010 in the pod
+    nodePort: 30080                          # Fixed NodePort (between 30000–32767)
+
+
+
+
+
+✅ Apply this YAML
+kubectl apply -f deployment.yaml
+
+
+✅ Get NodePort and Test
+Get service details:
+
+* kubectl get svc <my-app-service>
+
+Example output:
+
+NAME             TYPE       CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+my-app-service   NodePort   10.100.200.15  <none>        80:30080/TCP   1m
+
+* kubectl get nodes -o wide
+
+Get your EC2 node public IP:
+
+* curl ifconfig.me
+
+Test from your EC2 or browser:
+
+* curl http://<EC2-Public-IP>:30080
+
+
+
+
+***another way to create nodeport ip service for existing deployment.
+----------------------------------------------------------------------
+
+** kubectl expose deployment my-deployments --type=NodePort --name=my-service --port=80 --target-port=80
+
+
+Explanation of flags:
+
+deployment my-deployments → Refers to the Deployment you already created.
+
+--type=NodePort → Exposes the Service on a port of each Node (between 30000–32767).
+
+--name=my-service → The Service will be named my-service.
+
+--port=80 → The port your Service exposes (clients will use this).
+
+--target-port=80 → The port inside your Pod containers that traffic gets forwarded to.
+
+
+Example:
+
+If you run the above, you’ll get a Service. You can check it with:
+
+*kubectl get svc my-service
+
+
+It will show something like:
+
+NAME         TYPE       CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+my-service   NodePort   10.0.23.45     <none>        80:31543/TCP   5s
+
+
+Here:
+
+80 → Service port
+
+31543 → NodePort assigned (random unless you set it with --node-port=31543)
+
+You can then access your app from outside using:
+
+*http://<NodePublicIP>:31543
+
+
+
+
+
+<<NODE SELECTOR>>
+-------------------------
+
+ONE WAY : when we created the node group that time also add the lables
+SECOND WAY : when we created the node group that time whithout adding the lables using below mentioned steaps
+
+🔹 Step 1: Label your EKS Nodes
+
+Pick a node and add a label (example: vandana=vinay):
+
+*kubectl get nodes
+
+
+Output example:
+
+NAME                                          STATUS   ROLES    AGE   VERSION
+ip-10-0-3-12.ap-south-1.compute.internal      Ready    <none>   1h    v1.33.4-eks
+ip-10-0-3-210.ap-south-1.compute.internal     Ready    <none>   1h    v1.33.4-eks
+
+
+Now label them:
+
+*kubectl label node ip-10-0-3-12.ap-south-1.compute.internal vandana=vinay
+*kubectl label node ip-10-0-3-210.ap-south-1.compute.internal vandana=vinay
+
+🔹 Step 2: Verify Node Labels
+
+*kubectl get nodes --show-labels | grep vandana
+
+
+You should see something like:
+
+...,kubernetes.io/os=linux,vinay=vandana
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+                                                                                                   5). service object
+
+                                                                                                    B) load balancing ip
+
+
+when we create the subnets that time tag the subnets:
+-----------------------------------------------------
+✅ Fix
+
+You need to tag your subnets properly in AWS:
+
+**Public Subnets (for external LoadBalancer):
+Tag key: kubernetes.io/role/elb
+Value: 1
+
+**Private Subnets (for internal LoadBalancer):
+Tag key: kubernetes.io/role/internal-elb
+Value: 1
+
+**All subnets used by the cluster also need:
+Tag key: kubernetes.io/cluster/<your-cluster-name>
+Value: owned (if created by EKS) or shared
+
+
+another way to tag the subnets: You can add via AWS CLI too:
+------------------------------------------------------------
+
+aws ec2 create-tags \
+  --resources <subnet-id> \
+  --tags Key=kubernetes.io/role/internal-elb,Value=1 \
+         Key=kubernetes.io/cluster/<your-cluster-name>,Value=shared
+
+
+
+then
+
+*touch deployment.yaml
+*vim deployment.yaml
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test123
+  labels:
+    app: test123
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: test123
+  template:
+    metadata:
+      labels:
+        app: test123
+    spec:
+      containers:
+        - name: test123
+          image: vinaykumars064/cicd-repo:latest
+          ports:
+            - containerPort: 80
+      imagePullSecrets:
+        - name: my-secret
+
+
+*kubectl apply -f deployment.yaml
+now app deployment is complited.
+
+
+then creating the service deployment: in this method service is not dependent for any deployment its saparate its indipendent.
+-------------------------------------------------------------------------------------------------------------------------------
+touch service.yaml
+vim service.yaml
+
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: test123-svc
+  namespace: amma
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: external
+spec:
+  selector:
+    app: test123
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+  type: LoadBalancer
+
+
+
+*kubectl apply -f service.yaml
+*kubectl get svc
+show external ip
+
+
+
+***another way to create load balancing ip service for existing deployment.
+-----------------------------------------------------------------------------------
+
+*kubectl expose deployment my-deployments --type=LoadBalancer --name=my-service --port=80 --target-port=80
+
+
+What happens:
+
+Type: LoadBalancer → Creates an external cloud load balancer (like AWS ELB, GCP LB, Azure LB) and assigns an external IP or hostname.
+
+--port=80 → Clients use this port to connect.
+
+--target-port=80 → Traffic gets forwarded to port 80 in the Pod containers.
+
+--name=my-service → Service is named my-service.
+
+Check service:
+*kubectl get svc my-service
+
+
+You’ll see something like:
+
+NAME         TYPE           CLUSTER-IP     EXTERNAL-IP       PORT(S)        AGE
+my-service   LoadBalancer   10.96.33.120   a1b2c3d4.elb.amazonaws.com   80:31234/TCP   5s
+
+
+Cluster-IP: Internal service IP
+
+EXTERNAL-IP: Public IP or DNS of your load balancer (may take a few minutes to appear).
+
+80:31234 → 80 is service port, 31234 is nodeport backing the LB.
+
+Access:
+
+Once the EXTERNAL-IP is ready, you can test it:
+
+curl http://<EXTERNAL-IP>:80
+
+
+⚠️ Since you’re using EKS (AWS) from your earlier messages:
+
+Make sure your worker nodes have IAM policies that allow creating ELBs.
+
+Subnets must be public (with internet gateway) if you need a public external IP.
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+                                                                                   HORIZONTAL POD AUTOSCALING (HPA)
+
+
+touch deployment.yaml
+vim deployment.yaml
+
+
+✅ 1. Update Deployment with nodeSelector
+
+Here’s your Deployment YAML with nodeSelector added (key = vinay, value = vandana):
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app-deployment
+  labels:
+    app: my-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      nodeSelector:
+        vinay: vandana                  # Pods will only schedule on nodes with this label
+      containers:
+      - name: my-app-container
+        image: your-docker-user/your-private-image:latest
+        ports:
+        - containerPort: 8080
+      imagePullSecrets:
+      - name: my-docker-secret
+
+
+
+✅ 2. Create HPA using command
+
+You can create an HPA (autoscaler) for this Deployment using kubectl autoscale:
+
+*kubectl autoscale deployment my-app-deployment \
+  --cpu-percent=50 \
+  --min=2 \
+  --max=5
+
+
+--cpu-percent=50 → Target average CPU utilization across Pods is 50%.
+
+--min=2 → Minimum 2 Pods.
+
+--max=5 → Maximum 5 Pods.
+
+Check HPA status:
+
+*kubectl get hpa
+
+
+another way
+--------------
+✅ 3. HPA YAML file
+
+If you prefer YAML, here’s the equivalent:
+
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-app-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-app-deployment
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+
+
+Apply it:
+
+-kubectl apply -f my-app-hpa.yaml
+
+
+⚠️ Important: For HPA based on CPU to work, you need the Metrics Server installed in your cluster (EKS doesn’t install it by default).
+
+
+how to check
+--------------
+
+🔍 1. List all HPAs
+*kubectl get hpa
+
+
+Example output:
+
+NAME          REFERENCE                   TARGETS   MINPODS   MAXPODS   REPLICAS   AGE
+my-app-hpa    Deployment/my-app-deployment   60%/50%   2         5         3         2m
+
+
+TARGETS → 60%/50% means current CPU usage is 60%, target is 50%.
+
+REPLICAS → Current number of pods.
+
+MINPODS / MAXPODS → Range you set in HPA.
+
+🔍 2. Describe details of HPA
+*kubectl describe hpa my-app-hpa
+
+
+You’ll see:
+
+Which deployment it’s scaling (Scale target).
+
+Current vs. desired replicas.
+
+CPU utilization metrics.
+
+Events (if scaling happened).
+
+🔍 3. Check deployment replicas after scaling
+*kubectl get deployment my-app-deployment
+
+
+This shows how many pods are running and desired:
+
+NAME                READY   UP-TO-DATE   AVAILABLE   AGE
+my-app-deployment   4/4     4            4           10m
+
+🔍 4. Watch pods while scaling
+
+You can keep watching pods scaling up/down:
+
+*kubectl get pods -l app=my-app -w
+
+
+⚠️ Reminder: If you don’t see CPU values in HPA (<unknown> instead of %), then Metrics Server is not installed.
+
+
+
+check the metric server installed or not
+------------------------------------------
+
+*kubectl get pods -n kube-system | grep metrics-server
+
+You should see a pod like:
+metrics-server-6c9c8c9b5c-abc12   1/1   Running   0   5m
+
+if in case not installed now install using these steps:
+------------------------------------------------------------
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+                                                                                       Taints and Tolerations:
+                                                                                     ----------------------------
+
+step by step with Kubernetes Taints and Tolerations:
+
+1. What are Taints and Tolerations?
+
+Taint (applied on Node): Stops pods from scheduling on a node unless the pod has a matching toleration.
+
+Toleration (applied on Pod): Allows a pod to “tolerate” the taint and get scheduled on that node.
+
+👉 Think of it like:
+
+Taint = Keep out sign on the node
+
+Toleration = Special pass for pods to enter
+
+2. Apply a Taint on a Node
+
+Command:
+
+*kubectl taint nodes <node-name> key=value:NoSchedule
+
+
+Example:
+
+*kubectl taint nodes worker-node1 role=database:NoSchedule
+
+
+This means: only pods with a toleration for role=database can run on worker-node1.
+
+NoSchedule → Pods without toleration won’t be scheduled here.
+
+Other effects:
+
+NoSchedule → don’t schedule pods unless toleration exists.
+
+PreferNoSchedule → try to avoid scheduling but not strict.
+
+NoExecute → evict existing pods if they don’t have toleration.
+
+3. Add Toleration in Pod Spec
+
+You add tolerations in the pod YAML under spec.tolerations.
+
+Example pod tolerating the above taint:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-db-pod
+spec:
+  containers:
+  - name: my-db-container
+    image: mysql:5.7
+  tolerations:
+  - key: "role"
+    operator: "Equal"
+    value: "database"
+    effect: "NoSchedule"
+
+4. Verify Taints on Node
+kubectl describe node <node-name> | grep Taints
+
+5. Remove a Taint
+kubectl taint nodes <node-name> key=value:NoSchedule-
+
+
+(Note the - at the end → removes the taint)
+
+✅ Summary:
+
+Taint nodes to restrict which pods can run there.
+
+Tolerations in pods allow them to bypass the restriction.
+
+
+my example
+
+
+ mainly two ways to taint a node
+---------------------------------
+
+*one way is go to node group select node group edit node group add "Kubernetes taints" then next.
+*another way is used to command :  kubectl taint nodes <node-name> appa=amma:NoSchedule
+
+and then add the toleration in deployment.yaml file example
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app-deployment
+  labels:
+    app: my-app
+spec:
+  replicas: 2                                # number of Pods to run
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+      - name: my-app-container
+        image: vinaykumars064/cicd-repo:latest   # replace with your private image
+        ports:
+        - containerPort: 8080                               # expose port inside container
+      imagePullSecrets:
+      - name: my-docker-secret
+      tolerations:
+      - key: "appa"
+        operator: "Equal"
+        value: "amma"
+        effect: "NoSchedule"
+
+
+* kubectl apply -f deployment.yaml
+* kubectl get pods
+
+Verify Taints on Node:
+* kubectl describe node <node-name> | grep Taints
+
+Remove a Taint:
+* kubectl taint nodes <node-name> key=value:NoSchedule-
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
