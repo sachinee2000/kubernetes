@@ -1,0 +1,7 @@
+ <vpc creation started>
+
+* first create one vpc security group with open all trafic in inbond and out bond roule.
+* create vpc and create internet gateway attached internet gateway.
+* create subnets in public then auto assingn public ip select everyone subnet go to actions edit subnet settings enable auto assign public ip.
+* create routetable and do subnet assosiation and edit routes.
+                                                                              <vpc creation is complited>
