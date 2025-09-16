@@ -1,0 +1,134 @@
+launch one ec2 os ubuntu, instence type t2 medium , public enable , security group all trafic allow, then launch instence.
+login the ec2 using connect.
+
+install the all neccesary packages.
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+1) Steps to Install AWS CLI v2 (Latest)
+
+Run these commands one by one:
+
+# Update system
+sudo apt update -y
+sudo apt install unzip curl -y
+
+# Download the latest AWS CLI v2 package
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+
+# Unzip the package
+unzip awscliv2.zip
+
+# Run the install script
+sudo ./aws/install
+
+# Verify version
+aws --version.
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+2) Install kubectl v1.31.1 on Ubuntu
+
+# Update system
+sudo apt update -y
+sudo apt install -y curl
+
+# Download kubectl v1.31.1 (x86_64/amd64)
+curl -LO "https://dl.k8s.io/release/v1.31.1/bin/linux/amd64/kubectl"
+
+# Make it executable
+chmod +x kubectl
+
+# Move to PATH
+sudo mv kubectl /usr/local/bin/
+
+# Verify version
+kubectl version --client
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+3) Step-by-Step: Install eksctl on Ubuntu.
+
+🔹 Step 1: Update packages
+sudo apt update && sudo apt upgrade -y
+
+🔹 Step 2: Download eksctl binary (latest version)
+curl --silent --location "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" -o eksctl.tar.gz
+
+🔹 Step 3: Extract and install
+tar -xzf eksctl.tar.gz
+sudo mv eksctl /usr/local/bin
+
+🔹 Step 4: Verify installation
+eksctl version
+
+
+You should see output like:
+
+eksctl version: 0.181.0
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+4) cluster to EC2 give access
+ * go to profile, select security crendentials, and create access key then copy paste the keys to cli
+
+ example:
+ ubuntu@ip-10-0-2-86:~$ aws configure
+AWS Access Key ID [None]:
+AWS Secret Access Key [None]:
+Default region name [None]:
+Default output format [None]:
+ubuntu@ip-10-0-2-86:~$
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+5) Update kubeconfig for your EKS cluster
+
+Run this command (replace with your cluster name & region):
+
+aws eks update-kubeconfig --region ap-south-1 --name <your-cluster-name>
+
+
+👉 This will create/update the config file at ~/.kube/config that kubectl uses.
+
+🔹 3. Test connection
+kubectl get nodes
+If your nodes are running, you’ll see them listed.
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+                                                                         if in case any error occuring
+error accoring tray this
+
+
+✅ Next steps to fix kubectl
+
+Step 1. Refresh kubeconfig
+Re-run:
+aws eks update-kubeconfig --region ap-south-1 --name my-cluster
+
+Step 2. Check what server your kubeconfig points to
+kubectl config view --minify | grep server:
+
+👉 It should now resolve to a hostname like:
+
+https://<cluster-id>.gr7.ap-south-1.eks.amazonaws.com
+
+
+Step 3. Test DNS resolution
+Run:
+nslookup 5B12D8692848263B5BEDB084FC474BB2.gr7.ap-south-1.eks.amazonaws.com
+or
+dig 5B12D8692848263B5BEDB084FC474BB2.gr7.ap-south-1.eks.amazonaws.com
+
+
+👉 If it shows a public IP (13.x.x.x or 3.x.x.x) → good.
+👉 If it still shows 10.x.x.x → your EC2 is still caching the old DNS. Restart resolver:
+
+sudo systemctl restart systemd-resolved
+
+Step 4. Test kubectl
+kubectl get svc
+kubectl get nodes
