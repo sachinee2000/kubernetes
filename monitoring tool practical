@@ -1,0 +1,576 @@
+  HOW TO SETUP PROMETHEUS AND NODE ECPORTER AND GRAFANA
+                                                                               ------------------------------------------------------
+
+
+
+**first create one ec2 instence then login the ec2 then brows prometheus.io
+
+i create using chatgpt
+
+
+                                                                                                 SETUP PROMETHEUS
+                                                                                                 ----------------
+                                                                                                 
+
+
+0) Update & tools
+---------------------
+sudo apt update
+sudo apt install -y wget curl tar ufw
+
+
+1) PROMETHEUS — install & run (server)
+-----------------------------------------
+
+Notes: Prometheus provides precompiled binaries. Use those for a simple VM install.
+Prometheus
+Download & extract (example using v3.0.1 — change the version if you want a different one):
+
+cd /tmp
+wget https://github.com/prometheus/prometheus/releases/download/v3.0.1/prometheus-3.0.1.linux-amd64.tar.gz
+tar xzf prometheus-3.0.1.linux-amd64.tar.gz
+cd prometheus-3.0.1.linux-amd64
+
+
+Install binaries and create user/dirs:
+------------------------------------------
+
+sudo mv prometheus promtool /usr/local/bin/
+sudo useradd --no-create-home --shell /usr/sbin/nologin prometheus || true
+sudo mkdir -p /etc/prometheus /var/lib/prometheus
+sudo chown -R prometheus:prometheus /etc/prometheus /var/lib/prometheus
+
+
+Create minimal config /etc/prometheus/prometheus.yml:
+------------------------------------------------------
+
+sudo tee /etc/prometheus/prometheus.yml > /dev/null <<'YML'
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']  # update to other hosts like '10.0.0.5:9100'
+YML
+
+sudo chown prometheus:prometheus /etc/prometheus/prometheus.yml
+
+
+
+
+(For more scrape config examples and “getting started” guidance see Prometheus docs.)
+Prometheus
+----------------------------------------------------------------------------------------
+
+Create systemd unit /etc/systemd/system/prometheus.service:
+---------------------------------------------------------------
+ 
+
+sudo tee /etc/systemd/system/prometheus.service > /dev/null <<'INI'
+[Unit]
+Description=Prometheus
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=prometheus
+Group=prometheus
+Type=simple
+ExecStart=/usr/local/bin/prometheus \
+  --config.file=/etc/prometheus/prometheus.yml \
+  --storage.tsdb.path=/var/lib/prometheus \
+  --storage.tsdb.retention.time=30d
+
+Restart=on-failure
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+INI
+
+
+**--storage.tsdb.retention.time=30d is optional — adjust retention or remove it (Prometheus default behavior varies by version; you can set whatever you need). (See storage docs.)
+Prometheus
+
+
+Start Prometheus:
+-------------------
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now prometheus
+sudo systemctl status prometheus --no-pager
+
+
+Verify:
+---------
+
+Browser: http://<your-server-ip>:9090
+
+Targets page: http://<your-server-ip>:9090/targets (should show the prometheus job and later node targets).
+
+
+
+
+
+
+
+                                                                                                          NODE EXPORTER
+                                                                                                          --------------
+                                                                                                         
+                                                                                                         
+                                                                                                         
+                                                                                                         
+   Pick a real version of Node Exporter. As of now, the latest is 1.7.0.
+Run this instead:
+---------------------------------------------------------------------------
+
+
+cd /tmp
+NE_VER=1.7.0
+wget https://github.com/prometheus/node_exporter/releases/download/v${NE_VER}/node_exporter-${NE_VER}.linux-amd64.tar.gz
+tar xzf node_exporter-${NE_VER}.linux-amd64.tar.gz
+sudo mv node_exporter-${NE_VER}.linux-amd64/node_exporter /usr/local/bin/
+
+
+Next steps (to run it as a service)
+-----------------------------------
+
+Create a dedicated user:
+-----------------------
+
+
+sudo useradd --no-create-home --shell /bin/false nodeusr
+
+
+Create systemd unit file:
+---------------------------
+
+
+sudo tee /etc/systemd/system/node_exporter.service > /dev/null <<'EOF'
+[Unit]
+Description=Node Exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=nodeusr
+Group=nodeusr
+Type=simple
+ExecStart=/usr/local/bin/node_exporter
+
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+
+Then reload & start:
+--------------------
+
+
+sudo systemctl daemon-reload
+sudo systemctl enable node_exporter
+sudo systemctl start node_exporter
+sudo systemctl status node_exporter
+
+
+
+Now Node Exporter should be listening on http://<your-server-ip>:9100/metrics.  
+
+
+
+
+
+                                                                                               GRAFANA
+                                                                                             ------------
+
+
+
+ 1) Install Grafana (APT repo — recommended)
+Add Grafana’s APT repo and install the package (official instructions). Run on the machine where you want Grafana:
+---------------------------------------------------------------------------------------------------------------------
+
+# prerequisites
+----------------
+sudo apt-get install -y apt-transport-https software-properties-common wget gnupg
+
+
+# add grafana GPG key (creates /etc/apt/keyrings/grafana.gpg)
+----------------------------------------------------------------
+sudo mkdir -p /etc/apt/keyrings
+wget -q -O - https://apt.grafana.com/gpg.key | gpg --dearmor | sudo tee /etc/apt/keyrings/grafana.gpg > /dev/null
+
+
+# add repository (stable)
+---------------------------
+echo 'deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main' | sudo tee /etc/apt/sources.list.d/grafana.list
+
+sudo apt-get update
+sudo apt-get install -y grafana
+
+
+(Official docs: install from APT repo.)
+Grafana LabS
+-------------------------------------------
+# Start and enable Grafana:
+---------------------------
+
+sudo systemctl enable --now grafana-server
+sudo systemctl status grafana-server --no-pager
+
+
+
+(You can also install with a .deb or standalone binary; apt repo keeps updates easier.)
+Grafana Labs
+2) Open the Grafana port (default 3000)
+Default Grafana web UI is http://<GRAFANA_IP>:3000. Allow the port (example using ufw):
+
+
+# allow only your admin IP (recommended)
+-----------------------------------------
+sudo ufw allow from <YOUR_ADMIN_IP> to any port 3000 proto tcp
+
+
+
+# OR allow from anywhere (less secure)
+---------------------------------------
+sudo ufw allow 3000/tcp
+
+
+
+(Confirmed default URL: http://localhost:3000.)
+Grafana Labs
+
+
+3) First login — change admin password
+-----------------------------------------
+
+Open http://<GRAFANA_IP>:3000 in your browser.
+
+Default username/password: admin / admin.
+
+Grafana will prompt you to change the password on first login.
+Grafana Labs
+
+
+4) Add Prometheus as a data source (two ways)
+UI method (quick)
+--------------------------------------------------
+
+In Grafana left menu → Connections (or Configuration → Data Sources) → Add new connection → search “Prometheus”.
+
+Set URL = http://<PROM_IP>:9090 (if Grafana runs on the same host as Prometheus use http://localhost:9090).
+
+Set Access = proxy (Server) or direct (Browser) — proxy is common.
+
+Click Save & test — you should see “Successfully queried the Prometheus API.”
+Grafana Labs
+
+(Steps and options documented in Grafana Prometheus datasource docs.)
+Grafana Labs
+
+Provisioning method (automate / recommended for repeatable installs)
+
+Create a provisioning YAML so Grafana automatically creates the Prometheus data source at startup:
+
+sudo tee /etc/grafana/provisioning/datasources/prometheus.yml > /dev/null <<'YML'
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://<PROM_IP>:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      httpMethod: POST
+      manageAlerts: true
+YML
+
+# restart grafana to apply provisioning
+sudo systemctl restart grafana-server
+
+
+Note: provisioned data sources are created/managed at startup and cannot be edited in the UI afterward (you can remove/replace the YAML and restart to change).
+Grafana Labs
++1
+
+5) Import dashboards (UI or provisioning)
+Quick UI import (recommended first step)
+
+In Grafana: + (Create) → Import → paste Dashboard ID or upload JSON.
+
+Example: Node Exporter Full dashboard — commonly used ID 1860 (or other forks like 12486). Paste 1860 and choose your Prometheus datasource when prompted.
+Grafana Labs
++1
+
+Steps:
+
+Create → Import → enter 1860 → Load.
+
+Select your Prometheus data source from the dropdown.
+
+Click Import. Dashboard appears.
+
+Provision dashboards (automated)
+
+If you want dashboards automatically deployed from files:
+
+Create a provider file:
+
+sudo tee /etc/grafana/provisioning/dashboards/node-providers.yml > /dev/null <<'YML'
+apiVersion: 1
+providers:
+  - name: 'node-exporter-provider'
+    orgId: 1
+    folder: 'Node Exporter'
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards
+YML
+
+sudo mkdir -p /var/lib/grafana/dashboards
+
+
+Place dashboard JSON files into /var/lib/grafana/dashboards (one JSON per dashboard). Grafana will load them on startup. (Docs: provisioning dashboards.)
+Grafana Labs
+
+6) Verify everything
+-------------------------
+
+In Grafana UI → Explore choose Prometheus data source and run up{job="node"} or node_memory_MemAvailable_bytes to confirm metrics.
+
+From Grafana server shell test reachability:
+
+curl -sS http://<PROM_IP>:9090/-/ready
+curl -sS http://<PROM_IP>:9090/metrics | head -n 20
+
+
+Check Grafana logs if problems:
+
+sudo journalctl -u grafana-server -f --no-pager
+
+
+(“Successfully queried the Prometheus API.” appears when Save & test succeeds.)
+Grafana Labs
+
+7) Quick copy-paste install + provisioning (edit <PROM_IP> first)
+-------------------------------------------------------------------
+# install grafana (APT repo)
+sudo apt-get install -y apt-transport-https software-properties-common wget gnupg
+sudo mkdir -p /etc/apt/keyrings
+wget -q -O - https://apt.grafana.com/gpg.key | gpg --dearmor | sudo tee /etc/apt/keyrings/grafana.gpg > /dev/null
+echo 'deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main' | sudo tee /etc/apt/sources.list.d/grafana.list
+sudo apt-get update
+sudo apt-get install -y grafana
+
+# enable and start
+sudo systemctl enable --now grafana-server
+
+# provision prometheus datasource (replace <PROM_IP>)
+sudo tee /etc/grafana/provisioning/datasources/prometheus.yml > /dev/null <<'YML'
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://<PROM_IP>:9090
+    isDefault: true
+    editable: true
+YML
+
+# restart grafana to apply
+sudo systemctl restart grafana-server
+
+
+(Install steps taken from Grafana docs.)
+Grafana Labs
+
+8) Common troubleshooting
+-----------------------------
+
+Grafana says “Data source not reachable” — check network/firewall, curl http://<PROM_IP>:9090 from Grafana host, ensure Prometheus is listening and firewall (ufw or cloud security group) allows 9090.
+
+Provisioned datasource can’t be edited — remove/modify provisioning YAML and restart Grafana (provisioned sources are managed by files).
+Grafana Labs
++1
+
+Dashboard panels show “no data” — verify the Prometheus queries in Explore (time range, label values), ensure Prometheus is scraping node_exporter and targets show UP (http://<PROM_IP>:9090/targets).
+
+See Grafana logs: sudo journalctl -u grafana-server -n 200 --no-pager.
+
+If you want, I can:
+
+give a ready-to-run provisioning file with <PROM_IP> inserted (I’ll put your Prometheus IP),
+
+OR show the Docker/Helm flow instead,
+
+OR give the exact commands to download a specific Node Exporter dashboard JSON to /var/lib/grafana/dashboards and provision it automatically.
+
+Tell me which of those you prefer and I’ll paste the exact file (no waiting).
+
+
+
+
+                                                                                                 ORORORORORORORORORO
+                                                                                                 ---------------------
+
+
+
+🔹 1. Install Grafana (on Ubuntu/Debian)
+Run these commands:
+# Add Grafana GPG key
+-----------------------------------------------
+
+sudo mkdir -p /etc/apt/keyrings/
+wget -q -O - https://apt.grafana.com/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/grafana.gpg
+
+# Add Grafana repo
+-----------------------
+echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main" | sudo tee /etc/apt/sources.list.d/grafana.list
+
+# Update & install Grafana
+-------------------------------
+sudo apt-get update
+sudo apt-get install grafana -y
+
+
+
+
+🔹 2. Enable and start Grafana
+-----------------------------------
+After installation, the service file grafana-server.service will exist. Then run:
+-----------------------------------------------------------------------------------
+
+sudo systemctl daemon-reload
+sudo systemctl enable grafana-server
+sudo systemctl start grafana-server
+
+
+Check status:
+---------------
+sudo systemctl status grafana-server --no-pager
+
+
+🔹 3. Access Grafana
+-------------------------
+
+By default, Grafana runs on port 3000.
+
+👉 Open in browser:
+
+http://<YOUR_SERVER_IP>:3000
+
+
+Default credentials:
+---------------------------
+Username: admin
+Password: admin (you’ll be asked to reset on first login  
+
+
+
+
+
+
+
+                                                                                            IF IN CASE ADDING THE ONE MORE EC2 OR SERVER
+                                                                                            -----------------------------------------------
+
+
+
+                                                                                           
+                 🔹 1. Install Node Exporter on the new node
+                ------------------------------------------------
+               
+
+On the new server (let’s call it node2):
+-----------------------------------------
+
+NE_VER=1.7.0    # example version
+wget https://github.com/prometheus/node_exporter/releases/download/v${NE_VER}/node_exporter-${NE_VER}.linux-amd64.tar.gz
+tar xzf node_exporter-${NE_VER}.linux-amd64.tar.gz
+sudo mv node_exporter-${NE_VER}.linux-amd64/node_exporter /usr/local/bin/
+
+# Create a systemd service
+
+sudo tee /etc/systemd/system/node_exporter.service <<EOF
+[Unit]
+Description=Node Exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=nobody
+ExecStart=/usr/local/bin/node_exporter
+
+[Install]
+WantedBy=default.target
+EOF
+
+
+# Start and enable service
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now node_exporter
+
+
+Verify it:
+-------------
+
+curl http://localhost:9100/metrics
+
+
+👉 Should return lots of metrics.
+
+🔹 2. Update Prometheus configuration
+-----------------------------------------
+
+On your Prometheus server, edit the config file (usually /etc/prometheus/prometheus.yml) and add the new node under scrape_configs.
+
+Example:
+
+
+scrape_configs:
+  - job_name: "node_exporter"
+    static_configs:
+      - targets: ["<OLD_NODE_IP>:9100", "<NEW_NODE_IP>:9100"]
+     
+
+
+Replace <NEW_NODE_IP> with your new server’s IP.
+
+
+
+🔹 3. Reload Prometheus
+-----------------------------
+
+Check Prometheus config first:
+
+promtool check config /etc/prometheus/prometheus.yml
+
+
+If no errors, reload Prometheus without restarting (if you enabled web admin API):
+
+curl -X POST http://localhost:9090/-/reload
+
+
+Or restart the service:
+
+sudo systemctl restart prometheus
+
+
+
+🔹 4. Verify in Prometheus
+---------------------------------
+
+Open Prometheus UI → http://<PROMETHEUS_IP>:9090/targets
+
+You should see the new node (<NEW_NODE_IP>:9100) under "node_exporter" job.
+
+✅ Now Prometheus is scraping your extra node              
