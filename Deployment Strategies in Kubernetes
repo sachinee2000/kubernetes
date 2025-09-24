@@ -1,0 +1,373 @@
+🚀 Deployment Strategies in Kubernetes
+
+When you update your app in Kubernetes, there are different ways (strategies) to roll out the new version.
+
+ 
+1. Recreate Strategy
+---------------------
+
+How it works:
+Kubernetes deletes all old Pods first, then creates new Pods.
+
+Use case: When downtime is okay.
+
+Example:
+
+Old app v1 pods are stopped
+
+New app v2 pods are started
+
+Pros: Simple
+
+Cons: Causes downtime
+
+strategy:
+  type: Recreate
+
+   
+
+2. RollingUpdate Strategy (default)
+------------------------------------
+   
+How it works:
+Kubernetes gradually replaces old Pods with new Pods.
+
+Use case: When you want zero downtime.
+
+Example:
+
+Starts 1 new v2 Pod → Deletes 1 old v1 Pod → Repeats until all are v2
+
+Pros: No downtime
+
+Cons: Rollout may be slower
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1        # extra pod allowed above replicas
+    maxUnavailable: 1  # old pods that can be stopped during update
+
+     
+
+3. Blue-Green Deployment (not a built-in type, but common practice)
+-----------------------------------------------------------------------
+
+     
+How it works:
+Run two versions at the same time (Blue = old, Green = new).
+Switch traffic to Green when ready.
+
+Use case: Safer upgrades, easy rollback.
+
+Pros: Instant rollback
+
+Cons: Needs extra resources (running both versions).
+
+ 
+
+4. Canary Deployment (also not built-in, done via Service/Istio)
+-----------------------------------------------------------------
+
+ 
+How it works:
+Release the new version to a small % of users first.
+If it works fine → increase gradually.
+
+Use case: Testing new features safely.
+
+Pros: Reduces risk
+
+Cons: Needs traffic-splitting tools (e.g., Istio, service mesh).
+
+
+ 
+
+✅ Summary in one line each:
+-------------------------------
+  -------------------------------
+Recreate → Delete old, then add new (downtime).
+
+RollingUpdate → Replace gradually (no downtime, default).
+
+Blue-Green → Run both, switch traffic at once.
+
+Canary → Test with few users, then expand.
+
+
+
+
+
+
+
+
+  1).  RollingUpdate Strategy (default)
+  ----------------------------------------
+
+  touch deployment.yaml
+  vim deployment.yaml
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deployment
+  labels:
+    app: my-deployment
+spec:
+  replicas: 2                                # number of Pods to run
+  selector:
+    matchLabels:
+      app: my-deployment
+  template:
+    metadata:
+      labels:
+        app: my-deployment
+    spec:
+      containers:
+      - name: my-deployment
+        image: vinaykumars064/cicd-repo:7   # replace with your private image
+        ports:
+        - containerPort: 8010                               # expose port inside container
+      imagePullSecrets:
+      - name: my-docker-secret
+
+
+* kubectl apply -f deployment.yaml
+*kubectl get pods
+
+
+create a loadbalancing service::::
+------------------------------------
+
+* touch service.yaml
+* vim service.yaml
+
+
+✅ Step 3: Add the right annotation to your Service
+
+If you want internet-facing LoadBalancer, update your Service YAML:
+----------------------------------------------------------------------
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: external
+spec:
+  selector:
+    app: my-deployment
+  ports:
+    - port: 80
+      targetPort: 8010
+      protocol: TCP
+  type: LoadBalancer
+
+
+If you want internal LoadBalancer (private access only):-
+--------------------------------------------------------------
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: internal
+spec:
+  selector:
+    app: my-deployment
+  ports:
+    - port: 80
+      targetPort: 8010
+      protocol: TCP
+  type: LoadBalancer
+
+
+
+✅ Step 4: Verify
+
+After applying:
+
+*kubectl apply -f my-service.yaml
+*kubectl get svc my-service -w
+
+
+
+orrrrr creating a service with command also ::::
+
+** kubectl expose deployments my-deployment --type LoadBalancer --port 80 -- target-port 8010
+
+*kubectl get svc
+*kubectl get svc my-service -w
+
+
+onece creted the deployment
+after we creating ROLLINGUPDATE STARTEGY
+------------------------------------------
+
+*vim deployment.yaml
+chang the version of dockerfile then save and quit.
+
+again apply the deployment on same deployment
+* kubectl apply -f deployment.yaml
+shows: configured.
+
+** kubectl rollout status deployments/my-deployment
+shows the succesfully rollout.
+
+** kubectl rollout history deployment/my-deployment
+shows the old version changed the new version.
+
+** kubectl rollout undo deployments/my-deployment
+shows the rolled back.
+
+** kubectl rollout history deployment/my-deployment
+shows the old version changed the new version.
+
+** kubectl rollout undo deployments/my-deployment --to-revision=2
+shows the rolled back to partiqulor version.
+
+
+
+
+
+2) Blue green or old new deploymnt startegy ::
+---------------------------------------------------
+
+
+touch deployment1.yaml
+vim deployment1.yaml
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    run: my-deployment-blue
+  name: my-deployment-blue
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: my-deployment-blue
+      version: 7
+  template:
+    metadata:
+      labels:
+        run: my-deployment-blue
+        version: 7
+    spec:
+      containers:
+        - name: my-deployment-blue
+          image: vinaykumars064/cicd-repo:7
+          ports:
+            - containerPort: 8010
+
+
+* kubectl apply -f my-deployment1.yaml
+* kubectl get pods
+
+
+now creating service
+---------------------
+
+touch service.yaml
+vim service.yaml
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+spec:
+  selector:
+    run: app
+    version: 7
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: 8010
+  type: LoadBalancer
+
+* kubectl apply -f service.yaml
+* kubectl get svc
+
+
+now compleating the deployment and service creation
+now one deployment is running live in production, now we requrement is update or upgrade the same running applicton with zero down time using blue green deployment startegy.
+
+
+** cp deployment1.yaml deployment2.yaml
+** vim deployment2.yaml
+
+now change the name and version in same deployment file then again deploy
+
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    run: my-deployment-green
+  name: my-deployment-green
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: my-deployment-green
+      version: latest
+  template:
+    metadata:
+      labels:
+        run: my-deployment-green
+        version: latest
+    spec:
+      containers:
+        - name: my-deployment-green
+          image: vinaykumars064/cicd-repo:latest
+          ports:
+            - containerPort: 8010
+
+** kubectl apply -f deployment2.yaml
+** kubectl get pods
+
+now we go to the service
+--------------------------
+
+choose the same old service file then just change version
+
+**vim service.yaml
+
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+spec:
+  selector:
+    run: app
+    version: latest
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: 8010
+  type: LoadBalancer
+
+
+** kubectl apply -f service.yaml
+** kubectl get svc
+
+these type using creting the blue green deployment startegy
+
+#Blue-Green deployment is a release strategy to minimize downtime and risk.
+#You run two environments:
+#Blue → the current running version (production).
+#Green → the new version to be deployed.
+#Traffic is initially routed to Blue.
+#You deploy and test the new version in Green without affecting users.
+#Once validated, you switch traffic from Blue to Green.
+#If issues occur, you can quickly roll back by redirecting traffic to Blue again.
+
+👉 This ensures zero downtime and safe rollbacks.
